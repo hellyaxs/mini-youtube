@@ -1,0 +1,61 @@
+services:
+  app:
+    build: .
+    ports:
+      - "8080:8080"
+    volumes:
+      - .:/app
+      - ./uploads:/uploads
+    environment:
+      - DB_HOST=${DB_HOST:-db}
+      - DB_PORT=${DB_PORT:-5432}
+      - DB_USER=${DB_USER:-postgres}
+      - DB_PASSWORD=${DB_PASSWORD:-postgres}
+      - DB_NAME=${DB_NAME:-postgres}
+      - DB_SSL_MODE=${DB_SSL_MODE:-disable}
+      - AWS_REGION=${AWS_REGION:-us-east-1}
+      - S3_BUCKET=${S3_BUCKET:-your_bucket_name}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-your_access_key_id}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-your_secret_access_key}
+      - S3_ENDPOINT=${S3_ENDPOINT:-http://localstack:4566}
+    depends_on:
+      - db
+      - localstack
+    networks:
+      - app-network
+    restart: unless-stopped
+    tty: true
+    stdin_open: true
+  db:
+    image: postgres:15-alpine
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    environment:
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
+      POSTGRES_DB: ${DB_NAME:-postgres}
+    networks:
+      - app-network
+    restart: unless-stopped
+  localstack:
+    image: localstack/localstack:1.4
+    ports:
+      - "4566:4566"
+      - "4510-4559:4510-4559"
+    environment:
+      - SERVICES=s3
+      - DEFAULT_REGION=${AWS_REGION:-us-east-1}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-your_access_key_id}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-your_secret_access_key}
+    networks:
+      - app-network
+    restart: unless-stopped
+
+networks:
+  app-network:
+    driver: bridge
+volumes:
+  postgres_data:
+    driver: local

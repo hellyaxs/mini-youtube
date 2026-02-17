@@ -115,7 +115,7 @@ func (wp *workerPool) worker(ctx context.Context, workerID int, inputCh <-chan J
 	wp.logger.Info("Worker %d started","workerId", workerID)
 
 	for{
-		select {
+		select { // select consegue monitorar mais de um canal ao mesmo tempo	
 			case <-wp.stopCh:
 				wp.logger.Info("Worker interronpid","workerid", workerID)
 			case <-ctx.Done():
