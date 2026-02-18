@@ -1,16 +1,23 @@
 package main
 
 import (
+	"context"
 	"log"
-
-	db "github.com/hellyaxs/miniyoutube/internal/infra/database"
+	"github.com/hellyaxs/miniyoutube/internal/config"
 )
 
 func main() {
-	conn, err := db.ConnectPostgresFromEnv()
-	if err != nil {
-		log.Fatalf("Erro ao conectar ao banco de dados: %v", err)
-	}
-	defer conn.Close()
+	ctx := context.Background()
+	cfg := config.DefaultConfig()
 
+	a, err := config.New(ctx, cfg)
+	if err != nil {
+		log.Fatalf("Erro ao inicializar aplicação: %v", err)
+	}
+	defer a.Close()
+
+	if err := a.Run(ctx); err != nil {
+		log.Fatalf("Erro ao rodar aplicação: %v", err)
+	}
+	log.Println("Encerrado.")
 }
