@@ -9,12 +9,12 @@ import (
 	"os/signal"
 	"syscall"
 	"time"
-	"github.com/hellyaxs/miniyoutube/internal/application/hls"
+	"github.com/hellyaxs/miniyoutube/internal/infra/gateway/hls"
 	"github.com/hellyaxs/miniyoutube/internal/application/usecase"
 	db "github.com/hellyaxs/miniyoutube/internal/infra/database"
 	ginapi "github.com/hellyaxs/miniyoutube/internal/infra/http/gin"
-	"github.com/hellyaxs/miniyoutube/internal/infra/repository/postgres"
-	s3storage "github.com/hellyaxs/miniyoutube/internal/infra/storage/s3"
+	"github.com/hellyaxs/miniyoutube/internal/infra/database/repository/postgres"
+	s3storage "github.com/hellyaxs/miniyoutube/internal/infra/gateway/storage/s3"
 	"github.com/hellyaxs/miniyoutube/pkg/workerpool"
 )
 

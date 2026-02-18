@@ -5,8 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"path/filepath"
-
-	"github.com/hellyaxs/miniyoutube/internal/application/hls"
+	"github.com/hellyaxs/miniyoutube/internal/infra/gateway/hls"
 	"github.com/hellyaxs/miniyoutube/internal/domain/entity"
 	"github.com/hellyaxs/miniyoutube/internal/domain/repository"
 	"github.com/hellyaxs/miniyoutube/pkg/workerpool"
