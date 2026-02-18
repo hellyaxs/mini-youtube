@@ -9,6 +9,7 @@ import (
 	"github.com/hellyaxs/miniyoutube/internal/domain/entity"
 	"github.com/hellyaxs/miniyoutube/internal/domain/repository"
 	"github.com/hellyaxs/miniyoutube/pkg/workerpool"
+	"github.com/hellyaxs/miniyoutube/internal/application/jobs"
 )
 
 // UploadVideoInput contém os dados de entrada do upload.
@@ -40,9 +41,6 @@ func NewUploadVideoUseCase(
 	jobCh chan<- workerpool.Job,
 	uploadDir string,
 ) *UploadVideoUseCase {
-	if uploadDir == "" {
-		uploadDir = "./uploads"
-	}
 	return &UploadVideoUseCase{
 		repo:         repo,
 		jobCh:        jobCh,
@@ -88,7 +86,7 @@ func (uc *UploadVideoUseCase) Execute(ctx context.Context, input UploadVideoInpu
 		os.Remove(savePath)
 		return nil, fmt.Errorf("persistir vídeo: %w", err)
 	}
-	job := VideoConversionJob{VideoID: video.ID, FilePath: savePath}
+	job := jobs.VideoConversionJob{VideoID: video.ID, FilePath: savePath}
 	select {
 	case uc.jobCh <- job:
 	case <-ctx.Done():

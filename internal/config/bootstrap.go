@@ -8,7 +8,9 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"log/slog"
 	"time"
+
 	"github.com/hellyaxs/miniyoutube/internal/infra/gateway/hls"
 	"github.com/hellyaxs/miniyoutube/internal/application/usecase"
 	db "github.com/hellyaxs/miniyoutube/internal/infra/database"
@@ -16,6 +18,9 @@ import (
 	"github.com/hellyaxs/miniyoutube/internal/infra/database/repository/postgres"
 	s3storage "github.com/hellyaxs/miniyoutube/internal/infra/gateway/storage/s3"
 	"github.com/hellyaxs/miniyoutube/pkg/workerpool"
+	"github.com/hellyaxs/miniyoutube/internal/application/jobs"
+	"github.com/hellyaxs/miniyoutube/internal/application/jobs/factory"
+	"github.com/hellyaxs/miniyoutube/internal/application/gateway"
 )
 
 type App struct {
@@ -40,12 +45,11 @@ func New(ctx context.Context, cfg Config) (*App, error) {
 		return nil, err
 	}
 
-
 	repo := postgres.NewVideoRepository(conn)
 	jobCh := make(chan workerpool.Job, cfg.JobBufferSize)
 	hlsSvc := hls.NewService("")
 
-	var s3Uploader usecase.HLSUploader
+	var s3Uploader gateway.HLSUploader
 	if cfg.S3Endpoint != "" && cfg.S3Bucket != "" {
 		s3Cfg := s3storage.Config{
 			Bucket:          cfg.S3Bucket,
@@ -61,7 +65,15 @@ func New(ctx context.Context, cfg Config) (*App, error) {
 		}
 	}
 
-	processor := usecase.NewVideoConversionProcessor(repo, hlsSvc, s3Uploader, cfg.UploadDir, jobCh, nil)
+	logger := slog.Default()
+	jp := factory.NewJobProcessor()
+	factory.Register(jp, func(ctx context.Context, j jobs.VideoConversionJob) workerpool.Result {
+		return jobs.ProcessConversion(ctx, repo, hlsSvc, cfg.UploadDir, jobCh, logger, j)
+	})
+	factory.Register(jp, func(ctx context.Context, j jobs.UploadHLSJob) workerpool.Result {
+		return jobs.ProcessUploadHLS(ctx, repo, s3Uploader, logger, j)
+	})
+	processor := jp.Build(logger)
 	wp := workerpool.NewWorkerPool(workerpool.Config{WorkerCount: cfg.WorkerCount}, processor)
 	resultCh, err := wp.Start(ctx, jobCh)
 	if err != nil {

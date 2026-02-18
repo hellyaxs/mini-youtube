@@ -15,9 +15,6 @@ func loadEnv() {
 	_ = godotenv.Load()
 }
 
-// GetEnv retorna o valor da variável de ambiente key.
-// Se key não estiver definida ou estiver vazia, retorna defaultValue.
-// O arquivo .env é carregado na primeira chamada.
 func GetEnv(key, defaultValue string) string {
 	loadOnce.Do(loadEnv)
 	if value := os.Getenv(key); value != "" {
