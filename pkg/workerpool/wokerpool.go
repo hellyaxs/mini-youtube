@@ -112,29 +112,39 @@ func (wp *workerPool) IsRunning() bool {
 }
 
 func (wp *workerPool) worker(ctx context.Context, workerID int, inputCh <-chan Job, resultCh chan<- Result) {
-	wp.logger.Info("Worker %d started","workerId", workerID)
+	wp.logger.Info("Worker iniciado", "workerId", workerID)
+	defer wp.stopWg.Done()
 
-	for{
-		select { // select consegue monitorar mais de um canal ao mesmo tempo	
+	for {
+		select {
+		// parada explícita via Stop()
+		case <-wp.stopCh:
+			wp.logger.Info("Worker interrompido por Stop", "workerId", workerID)
+			return
+
+		// cancelamento via context (shutdown da aplicação)
+		case <-ctx.Done():
+			wp.logger.Info("Worker cancelado via contexto", "workerId", workerID)
+			return
+
+		// processamento normal de jobs
+		case job, ok := <-inputCh:
+			if !ok {
+				wp.logger.Info("Worker finalizado - canal de jobs fechado", "workerId", workerID)
+				return
+			}
+
+			result := wp.processorFunc(ctx, job)
+
+			select {
+			case resultCh <- result:
 			case <-wp.stopCh:
-				wp.logger.Info("Worker interronpid","workerid", workerID)
+				wp.logger.Info("Worker interrompido ao enviar resultado", "workerId", workerID)
+				return
 			case <-ctx.Done():
-				wp.logger.Info("Worker cancelado, interrpendo worker ","workerId", workerID)
-		    case job, ok := <-inputCh:
-				if !ok {
-					wp.logger.Info("Worker %d finalizado","workerid", workerID) 
-					return
-				}
-				result := wp.processorFunc(ctx, job)
-				select {
-					case resultCh <- result:
-					case <-wp.stopCh:
-						wp.logger.Info("Worker interrompido", "workerId", workerID)
-						return
-					case <-ctx.Done():
-						wp.logger.Info("Worker cancelado, interrompendo worker", "workerId", workerID)
-						return	
-				}
+				wp.logger.Info("Worker cancelado ao enviar resultado", "workerId", workerID)
+				return
+			}
 		}
 	}
 }
