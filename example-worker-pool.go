@@ -6,7 +6,6 @@ import (
 	"math/rand"
 	"sync"
 	"time"
-
 	"github.com/hellyaxs/miniyoutube/pkg/workerpool"
 )
 
@@ -23,7 +22,7 @@ type Resultado struct {
 func procesarNumero(ctx context.Context,job workerpool.Job) workerpool.Result {
 	numero := job.(NumeroJob).Numero
 	workerId := numero % 3
-
+ 
 	sleepTime := time.Duration(880 +rand.Intn(400)) * time.Millisecond
 	time.Sleep(sleepTime)
 	return Resultado{
@@ -35,9 +34,9 @@ func procesarNumero(ctx context.Context,job workerpool.Job) workerpool.Result {
 
 func main() {
 	valorMaximo := 100
-	bufferSize := 10
+	bufferSize := 100
 	pool := workerpool.NewWorkerPool(
-		workerpool.Config{WorkerCount: 3},
+		workerpool.Config{ WorkerCount: 100},
 		procesarNumero,
 	)
 	inputCh := make(chan workerpool.Job, bufferSize)
@@ -49,10 +48,10 @@ func main() {
 
 	var wg sync.WaitGroup
 	wg.Add(valorMaximo)
-	fmt.Println("Iniciando procesamiento")
+	fmt.Println("Iniciando processamento")
 
 	go func() {
-		for i := 0; i < valorMaximo; i++ {
+		for i := range valorMaximo {
 			inputCh <- NumeroJob{Numero: i}
 		}
 		close(inputCh)
