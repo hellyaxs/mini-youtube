@@ -11,7 +11,7 @@ import (
 )
 
 type Config struct {
-	User string
+	User string 
 	Password string
 	DBName string
 	Host string

@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"io/fs"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -35,9 +37,6 @@ type Config struct {
 
 // NewClient cria um cliente S3. Para LocalStack use Endpoint e UsePathStyle.
 func NewClient(ctx context.Context, cfg Config) (*Client, error) {
-	if cfg.Region == "" {
-		cfg.Region = "us-east-1"
-	}
 	resolver := aws.EndpointResolverWithOptionsFunc(func(service, region string, options ...interface{}) (aws.Endpoint, error) {
 		if cfg.Endpoint != "" {
 			return aws.Endpoint{URL: cfg.Endpoint}, nil
@@ -51,9 +50,8 @@ func NewClient(ctx context.Context, cfg Config) (*Client, error) {
 	if err != nil {
 		return nil, fmt.Errorf("carregar config aws: %w", err)
 	}
-	if cfg.AccessKeyID != "" && cfg.SecretAccessKey != "" {
-		awsCfg.Credentials = credentials.NewStaticCredentialsProvider(cfg.AccessKeyID, cfg.SecretAccessKey, "")
-	}
+
+	awsCfg.Credentials = credentials.NewStaticCredentialsProvider(cfg.AccessKeyID, cfg.SecretAccessKey, "")
 	client := s3.NewFromConfig(awsCfg, func(o *s3.Options) {
 		o.UsePathStyle = true
 	})
@@ -101,34 +99,39 @@ func (c *Client) UploadFile(ctx context.Context, localPath, key string) error {
 	return err
 }
 
-// UploadHLSDir envia todos os arquivos do diretório localDir para o prefixo S3 (prefix/videoID/).
-// Faz upload em paralelo (workers) e retorna a URL do manifest (primeiro .m3u8 encontrado).
+// UploadHLSDir envia recursivamente todos os arquivos de localDir para o prefixo S3.
+// Preserva a estrutura de subdiretórios (ex: 1080p/, 720p/, 480p/).
+// Faz upload em paralelo (workers) e retorna a URL do master.m3u8.
 func (c *Client) UploadHLSDir(ctx context.Context, localDir, prefix string, workers int) (manifestURL string, err error) {
-	entries, err := os.ReadDir(localDir)
-	if err != nil {
-		return "", err
-	}
-	var files []string
-	for _, e := range entries {
-		if e.IsDir() {
-			continue
-		}
-		files = append(files, filepath.Join(localDir, e.Name()))
-	}
-	if workers <= 0 {
-		workers = 5
-	}
 	type upload struct {
 		localPath string
 		key       string
 	}
+
 	var jobs []upload
-	for _, f := range files {
-		key := strings.TrimPrefix(strings.TrimPrefix(f, localDir), string(filepath.Separator))
-		key = filepath.Join(prefix, key)
-		key = filepath.ToSlash(key)
-		jobs = append(jobs, upload{localPath: f, key: key})
+	walkErr := filepath.WalkDir(localDir, func(path string, d fs.DirEntry, e error) error {
+		if e != nil || d.IsDir() {
+			return e
+		}
+		// mantém o caminho relativo a localDir para preservar subdirs no S3
+		rel, err := filepath.Rel(localDir, path)
+		if err != nil {
+			return err
+		}
+		key := filepath.ToSlash(filepath.Join(prefix, rel))
+		jobs = append(jobs, upload{localPath: path, key: key})
+		return nil
+	})
+	if walkErr != nil {
+		return "", walkErr
 	}
+
+	slog.Info("iniciando upload HLS para S3", "dir", localDir, "prefix", prefix, "arquivos", len(jobs))
+
+	if workers <= 0 {
+		workers = 5
+	}
+
 	var wg sync.WaitGroup
 	errCh := make(chan error, len(jobs))
 	sem := make(chan struct{}, workers)
@@ -153,11 +156,21 @@ func (c *Client) UploadHLSDir(ctx context.Context, localDir, prefix string, work
 	if err != nil {
 		return "", err
 	}
-	// URL do manifest: baseURL/prefix/index.m3u8 (ou o nome do arquivo .m3u8)
+
+	// Aponta para o master manifest (raiz do HLS, não os playlists de rendição)
 	for _, j := range jobs {
-		if strings.HasSuffix(j.key, ".m3u8") {
+		if strings.HasSuffix(j.key, "master.m3u8") {
 			manifestURL = c.baseURL + "/" + j.key
 			break
+		}
+	}
+	// fallback: primeiro .m3u8 encontrado caso o nome do master seja diferente
+	if manifestURL == "" {
+		for _, j := range jobs {
+			if strings.HasSuffix(j.key, ".m3u8") {
+				manifestURL = c.baseURL + "/" + j.key
+				break
+			}
 		}
 	}
 	return manifestURL, nil
